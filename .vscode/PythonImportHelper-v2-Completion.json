@@ -35,11 +35,19 @@
         "documentation": {}
     },
     {
-        "label": "EmailMessage",
-        "importPath": "email.message",
-        "description": "email.message",
+        "label": "MIMEMultipart",
+        "importPath": "email.mime.multipart",
+        "description": "email.mime.multipart",
         "isExtraImport": true,
-        "detail": "email.message",
+        "detail": "email.mime.multipart",
+        "documentation": {}
+    },
+    {
+        "label": "MIMEText",
+        "importPath": "email.mime.text",
+        "description": "email.mime.text",
+        "isExtraImport": true,
+        "detail": "email.mime.text",
         "documentation": {}
     },
     {
@@ -51,11 +59,20 @@
         "documentation": {}
     },
     {
+        "label": "is_valid_role",
+        "kind": 2,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "def is_valid_role(title: str) -> bool:\n    t = title.lower()\n    if any(x in t for x in EXCLUDE):\n        return False\n    return any(k in t for k in KEYWORDS) and any(l in t for l in LEVEL_WORDS)\ndef fetch_html(url):\n    try:\n        r = requests.get(url, headers=HEADERS, timeout=15)\n        return BeautifulSoup(r.text, \"html.parser\")\n    except Exception as e:",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
         "label": "fetch_html",
         "kind": 2,
         "importPath": "job_search",
         "description": "job_search",
-        "peekOfCode": "def fetch_html(url):\n    try:\n        r = requests.get(url, timeout=15, headers={\"User-Agent\": \"job-bot\"})\n        return BeautifulSoup(r.text, \"html.parser\")\n    except Exception as e:\n        print(f\"Error fetching {url}: {e}\")\n        return None\ndef parse_generic(site, soup):\n    jobs = []\n    for a in soup.select(\"a\")[:MAX_PER_SITE]:",
+        "peekOfCode": "def fetch_html(url):\n    try:\n        r = requests.get(url, headers=HEADERS, timeout=15)\n        return BeautifulSoup(r.text, \"html.parser\")\n    except Exception as e:\n        print(f\"[Error] Cannot fetch {url}: {e}\")\n        return None\ndef parse_generic(site, soup):\n    jobs = []\n    if soup is None:",
         "detail": "job_search",
         "documentation": {}
     },
@@ -64,7 +81,16 @@
         "kind": 2,
         "importPath": "job_search",
         "description": "job_search",
-        "peekOfCode": "def parse_generic(site, soup):\n    jobs = []\n    for a in soup.select(\"a\")[:MAX_PER_SITE]:\n        title = a.get_text(strip=True)\n        link = a.get(\"href\")\n        if not link or not title:\n            continue\n        link = link if link.startswith(\"http\") else f\"https://{site.lower()}.com{link}\"\n        t = title.lower()\n        if \"java\" in t and any(x in t for x in [\"junior\", \"entry\", \"fresher\", \"graduate\"]):",
+        "peekOfCode": "def parse_generic(site, soup):\n    jobs = []\n    if soup is None:\n        return jobs\n    for a in soup.select(\"a\")[:MAX_PER_SITE]:\n        title = a.get_text(strip=True)\n        link = a.get(\"href\")\n        if not title or not link:\n            continue\n        if not link.startswith(\"http\"):",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "parse_remoteok",
+        "kind": 2,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "def parse_remoteok():\n    jobs = []\n    try:\n        r = requests.get(\"https://remoteok.com/remote-java-jobs\", headers=HEADERS)\n        soup = BeautifulSoup(r.text, \"html.parser\")\n        for row in soup.select(\"tr.job\")[:MAX_PER_SITE]:\n            title_el = row.select_one(\"h2\")\n            title = title_el.get_text(strip=True) if title_el else \"\"\n            link_el = row.select_one(\"a.preventLink\")\n            link = \"https://remoteok.com\" + link_el[\"href\"] if link_el else \"\"",
         "detail": "job_search",
         "documentation": {}
     },
@@ -73,16 +99,16 @@
         "kind": 2,
         "importPath": "job_search",
         "description": "job_search",
-        "peekOfCode": "def collect_jobs():\n    all_jobs = []\n    for site, url in SOURCES:\n        soup = fetch_html(url)\n        if not soup:\n            continue\n        jobs = parse_generic(site, soup)\n        all_jobs.extend(jobs)\n    # dedupe\n    seen = set()",
+        "peekOfCode": "def collect_jobs():\n    all_jobs = []\n    for site, url in SOURCES:\n        if site == \"RemoteOK\":\n            all_jobs.extend(parse_remoteok())\n            continue\n        soup = fetch_html(url)\n        all_jobs.extend(parse_generic(site, soup))\n    # Deduplicate by link\n    seen = set()",
         "detail": "job_search",
         "documentation": {}
     },
     {
-        "label": "build_email",
+        "label": "build_html",
         "kind": 2,
         "importPath": "job_search",
         "description": "job_search",
-        "peekOfCode": "def build_email(jobs):\n    now = datetime.now().strftime(\"%Y-%m-%d %H:%M IST\")\n    if not jobs:\n        body = f\"No new entry-level Java startup jobs found as of {now}.\"\n        return \"Daily Jobs — No results\", body\n    lines = []\n    for i, j in enumerate(jobs, 1):\n        lines.append(f\"{i}) {j['title']} — {j['source']}\\n   {j['link']}\")\n    body = f\"Found {len(jobs)} new entry-level Java jobs at startups — {now}\\n\\n\" + \"\\n\\n\".join(lines)\n    subject = f\"[{len(jobs)}] Java Startup Roles — {datetime.now().strftime('%Y-%m-%d')}\"",
+        "peekOfCode": "def build_html(jobs):\n    now = datetime.now().strftime(\"%d %b %Y — %I:%M %p IST\")\n    if not jobs:\n        return f\"\"\"\n        <h2>🔥 Daily Java Job Update</h2>\n        <p>No matching entry-level Java jobs found today.</p>\n        <p><b>Time:</b> {now}</p>\n        \"\"\"\n    html = f\"\"\"\n    <h2>🔥 Daily Java Fresher Job Updates</h2>",
         "detail": "job_search",
         "documentation": {}
     },
@@ -91,7 +117,34 @@
         "kind": 2,
         "importPath": "job_search",
         "description": "job_search",
-        "peekOfCode": "def send_email(subject, body):\n    smtp_host = os.getenv(\"SMTP_HOST\")\n    smtp_user = os.getenv(\"SMTP_USER\")\n    smtp_pass = os.getenv(\"SMTP_PASS\")\n    to_email  = os.getenv(\"TO_EMAIL\")\n    msg = EmailMessage()\n    msg[\"Subject\"] = subject\n    msg[\"From\"] = smtp_user\n    msg[\"To\"] = to_email\n    msg.set_content(body)",
+        "peekOfCode": "def send_email(subject, html_body):\n    smtp_host = os.getenv(\"SMTP_HOST\")\n    smtp_user = os.getenv(\"SMTP_USER\")\n    smtp_pass = os.getenv(\"SMTP_PASS\")\n    to_email  = os.getenv(\"TO_EMAIL\")\n    msg = MIMEMultipart(\"alternative\")\n    msg[\"Subject\"] = subject\n    msg[\"From\"] = smtp_user\n    msg[\"To\"] = to_email\n    msg.attach(MIMEText(html_body, \"html\"))",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "KEYWORDS",
+        "kind": 5,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "KEYWORDS = [\"java\"]\nLEVEL_WORDS = [\"junior\", \"entry\", \"fresher\", \"graduate\", \"trainee\", \"0-1\", \"0-2\"]\nEXCLUDE = [\"senior\", \"lead\", \"manager\", \"architect\", \"principal\", \"staff\"]\nSOURCES = [\n    (\"Wellfound\", \"https://wellfound.com/jobs?search=java+junior\"),\n    (\"StartupJobs\", \"https://startup.jobs/?q=java+junior\"),\n    (\"Dice\", \"https://www.dice.com/jobs?q=java+junior\"),\n    (\"IndeedRSS\", \"https://www.indeed.com/rss?q=java+junior\"),\n    (\"RemoteOK\", \"https://remoteok.com/remote-java-jobs\"),\n]",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "LEVEL_WORDS",
+        "kind": 5,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "LEVEL_WORDS = [\"junior\", \"entry\", \"fresher\", \"graduate\", \"trainee\", \"0-1\", \"0-2\"]\nEXCLUDE = [\"senior\", \"lead\", \"manager\", \"architect\", \"principal\", \"staff\"]\nSOURCES = [\n    (\"Wellfound\", \"https://wellfound.com/jobs?search=java+junior\"),\n    (\"StartupJobs\", \"https://startup.jobs/?q=java+junior\"),\n    (\"Dice\", \"https://www.dice.com/jobs?q=java+junior\"),\n    (\"IndeedRSS\", \"https://www.indeed.com/rss?q=java+junior\"),\n    (\"RemoteOK\", \"https://remoteok.com/remote-java-jobs\"),\n]\nMAX_PER_SITE = 10",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "EXCLUDE",
+        "kind": 5,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "EXCLUDE = [\"senior\", \"lead\", \"manager\", \"architect\", \"principal\", \"staff\"]\nSOURCES = [\n    (\"Wellfound\", \"https://wellfound.com/jobs?search=java+junior\"),\n    (\"StartupJobs\", \"https://startup.jobs/?q=java+junior\"),\n    (\"Dice\", \"https://www.dice.com/jobs?q=java+junior\"),\n    (\"IndeedRSS\", \"https://www.indeed.com/rss?q=java+junior\"),\n    (\"RemoteOK\", \"https://remoteok.com/remote-java-jobs\"),\n]\nMAX_PER_SITE = 10\nHEADERS = {\"User-Agent\": \"Mozilla/5.0 JobBot/1.0\"}",
         "detail": "job_search",
         "documentation": {}
     },
@@ -100,7 +153,7 @@
         "kind": 5,
         "importPath": "job_search",
         "description": "job_search",
-        "peekOfCode": "SOURCES = [\n    (\"Wellfound\", \"https://wellfound.com/jobs?search=java+junior\"),\n    (\"StartupJobs\", \"https://startup.jobs/?q=java+junior\"),\n    (\"Dice\", \"https://www.dice.com/jobs?q=java+junior\"),\n    (\"IndeedRSS\", \"https://www.indeed.com/rss?q=java+junior\"),\n]\nMAX_PER_SITE = 10\ndef fetch_html(url):\n    try:\n        r = requests.get(url, timeout=15, headers={\"User-Agent\": \"job-bot\"})",
+        "peekOfCode": "SOURCES = [\n    (\"Wellfound\", \"https://wellfound.com/jobs?search=java+junior\"),\n    (\"StartupJobs\", \"https://startup.jobs/?q=java+junior\"),\n    (\"Dice\", \"https://www.dice.com/jobs?q=java+junior\"),\n    (\"IndeedRSS\", \"https://www.indeed.com/rss?q=java+junior\"),\n    (\"RemoteOK\", \"https://remoteok.com/remote-java-jobs\"),\n]\nMAX_PER_SITE = 10\nHEADERS = {\"User-Agent\": \"Mozilla/5.0 JobBot/1.0\"}\n# -------------------------------------------------------",
         "detail": "job_search",
         "documentation": {}
     },
@@ -109,7 +162,16 @@
         "kind": 5,
         "importPath": "job_search",
         "description": "job_search",
-        "peekOfCode": "MAX_PER_SITE = 10\ndef fetch_html(url):\n    try:\n        r = requests.get(url, timeout=15, headers={\"User-Agent\": \"job-bot\"})\n        return BeautifulSoup(r.text, \"html.parser\")\n    except Exception as e:\n        print(f\"Error fetching {url}: {e}\")\n        return None\ndef parse_generic(site, soup):\n    jobs = []",
+        "peekOfCode": "MAX_PER_SITE = 10\nHEADERS = {\"User-Agent\": \"Mozilla/5.0 JobBot/1.0\"}\n# -------------------------------------------------------\n# HELPERS\n# -------------------------------------------------------\ndef is_valid_role(title: str) -> bool:\n    t = title.lower()\n    if any(x in t for x in EXCLUDE):\n        return False\n    return any(k in t for k in KEYWORDS) and any(l in t for l in LEVEL_WORDS)",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "HEADERS",
+        "kind": 5,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "HEADERS = {\"User-Agent\": \"Mozilla/5.0 JobBot/1.0\"}\n# -------------------------------------------------------\n# HELPERS\n# -------------------------------------------------------\ndef is_valid_role(title: str) -> bool:\n    t = title.lower()\n    if any(x in t for x in EXCLUDE):\n        return False\n    return any(k in t for k in KEYWORDS) and any(l in t for l in LEVEL_WORDS)\ndef fetch_html(url):",
         "detail": "job_search",
         "documentation": {}
     }

@@ -5,38 +5,66 @@ import os
 import smtplib
 import requests
 from bs4 import BeautifulSoup
-from email.message import EmailMessage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime
 
-# Job sources
+# -------------------------------------------------------
+# CONFIGURATION
+# -------------------------------------------------------
+
+KEYWORDS = ["java"]
+LEVEL_WORDS = ["junior", "entry", "fresher", "graduate", "trainee", "0-1", "0-2"]
+
+EXCLUDE = ["senior", "lead", "manager", "architect", "principal", "staff"]
+
 SOURCES = [
     ("Wellfound", "https://wellfound.com/jobs?search=java+junior"),
     ("StartupJobs", "https://startup.jobs/?q=java+junior"),
     ("Dice", "https://www.dice.com/jobs?q=java+junior"),
     ("IndeedRSS", "https://www.indeed.com/rss?q=java+junior"),
+    ("RemoteOK", "https://remoteok.com/remote-java-jobs"),
 ]
 
 MAX_PER_SITE = 10
 
+HEADERS = {"User-Agent": "Mozilla/5.0 JobBot/1.0"}
+
+# -------------------------------------------------------
+# HELPERS
+# -------------------------------------------------------
+
+def is_valid_role(title: str) -> bool:
+    t = title.lower()
+    if any(x in t for x in EXCLUDE):
+        return False
+    return any(k in t for k in KEYWORDS) and any(l in t for l in LEVEL_WORDS)
+
+
 def fetch_html(url):
     try:
-        r = requests.get(url, timeout=15, headers={"User-Agent": "job-bot"})
+        r = requests.get(url, headers=HEADERS, timeout=15)
         return BeautifulSoup(r.text, "html.parser")
     except Exception as e:
-        print(f"Error fetching {url}: {e}")
+        print(f"[Error] Cannot fetch {url}: {e}")
         return None
+
 
 def parse_generic(site, soup):
     jobs = []
+    if soup is None:
+        return jobs
+
     for a in soup.select("a")[:MAX_PER_SITE]:
         title = a.get_text(strip=True)
         link = a.get("href")
-        if not link or not title:
+        if not title or not link:
             continue
-        link = link if link.startswith("http") else f"https://{site.lower()}.com{link}"
 
-        t = title.lower()
-        if "java" in t and any(x in t for x in ["junior", "entry", "fresher", "graduate"]):
+        if not link.startswith("http"):
+            link = f"https://{site.lower()}.com{link}"
+
+        if is_valid_role(title):
             jobs.append({
                 "title": title,
                 "company": "",
@@ -45,16 +73,46 @@ def parse_generic(site, soup):
             })
     return jobs
 
+
+def parse_remoteok():
+    jobs = []
+    try:
+        r = requests.get("https://remoteok.com/remote-java-jobs", headers=HEADERS)
+        soup = BeautifulSoup(r.text, "html.parser")
+        for row in soup.select("tr.job")[:MAX_PER_SITE]:
+            title_el = row.select_one("h2")
+            title = title_el.get_text(strip=True) if title_el else ""
+            link_el = row.select_one("a.preventLink")
+            link = "https://remoteok.com" + link_el["href"] if link_el else ""
+
+            if is_valid_role(title):
+                jobs.append({
+                    "title": title,
+                    "company": row.get("data-company", ""),
+                    "link": link,
+                    "source": "RemoteOK"
+                })
+    except Exception as e:
+        print("[RemoteOK Error]", e)
+    return jobs
+
+
+# -------------------------------------------------------
+# COLLECT ALL JOBS
+# -------------------------------------------------------
+
 def collect_jobs():
     all_jobs = []
-    for site, url in SOURCES:
-        soup = fetch_html(url)
-        if not soup:
-            continue
-        jobs = parse_generic(site, soup)
-        all_jobs.extend(jobs)
 
-    # dedupe
+    for site, url in SOURCES:
+        if site == "RemoteOK":
+            all_jobs.extend(parse_remoteok())
+            continue
+
+        soup = fetch_html(url)
+        all_jobs.extend(parse_generic(site, soup))
+
+    # Deduplicate by link
     seen = set()
     unique = []
     for j in all_jobs:
@@ -63,40 +121,77 @@ def collect_jobs():
             unique.append(j)
     return unique
 
-def build_email(jobs):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M IST")
+
+# -------------------------------------------------------
+# BUILD HTML EMAIL
+# -------------------------------------------------------
+
+def build_html(jobs):
+    now = datetime.now().strftime("%d %b %Y — %I:%M %p IST")
+
     if not jobs:
-        body = f"No new entry-level Java startup jobs found as of {now}."
-        return "Daily Jobs — No results", body
+        return f"""
+        <h2>🔥 Daily Java Job Update</h2>
+        <p>No matching entry-level Java jobs found today.</p>
+        <p><b>Time:</b> {now}</p>
+        """
 
-    lines = []
+    html = f"""
+    <h2>🔥 Daily Java Fresher Job Updates</h2>
+    <p><b>Time:</b> {now}</p>
+    <hr>
+    """
+
     for i, j in enumerate(jobs, 1):
-        lines.append(f"{i}) {j['title']} — {j['source']}\n   {j['link']}")
+        html += f"""
+        <p>
+        <b>{i}) {j['title']}</b><br>
+        🏢 <b>{j['source']}</b><br>
+        🔗 <a href="{j['link']}">{j['link']}</a>
+        </p>
+        """
 
-    body = f"Found {len(jobs)} new entry-level Java jobs at startups — {now}\n\n" + "\n\n".join(lines)
-    subject = f"[{len(jobs)}] Java Startup Roles — {datetime.now().strftime('%Y-%m-%d')}"
-    return subject, body
+    return html
 
-def send_email(subject, body):
+
+# -------------------------------------------------------
+# SEND EMAIL (HTML)
+# -------------------------------------------------------
+
+def send_email(subject, html_body):
     smtp_host = os.getenv("SMTP_HOST")
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
     to_email  = os.getenv("TO_EMAIL")
 
-    msg = EmailMessage()
+    msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = smtp_user
     msg["To"] = to_email
-    msg.set_content(body)
 
-    with smtplib.SMTP(smtp_host, 587) as s:
-        s.starttls()
-        s.login(smtp_user, smtp_pass)
-        s.send_message(msg)
+    msg.attach(MIMEText(html_body, "html"))
 
-    print("Email sent!")
+    try:
+        with smtplib.SMTP(smtp_host, 587) as s:
+            s.starttls()
+            s.login(smtp_user, smtp_pass)
+            s.sendmail(smtp_user, [to_email], msg.as_string())
+        print("Email sent successfully!")
+    except Exception as e:
+        print("[Email Error]", e)
+
+
+# -------------------------------------------------------
+# MAIN
+# -------------------------------------------------------
 
 if __name__ == "__main__":
     jobs = collect_jobs()
-    subject, body = build_email(jobs)
-    send_email(subject, body)
+    html = build_html(jobs)
+
+    subject = f"[{len(jobs)}] Daily Java Fresher Jobs — {datetime.now().strftime('%Y-%m-%d')}"
+    send_email(subject, html)
+
+    print("Jobs found:", len(jobs))
+    for j in jobs:
+        print("-", j["title"], "|", j["source"])
