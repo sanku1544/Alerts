@@ -1,0 +1,116 @@
+[
+    {
+        "label": "os",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "os",
+        "description": "os",
+        "detail": "os",
+        "documentation": {}
+    },
+    {
+        "label": "smtplib",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "smtplib",
+        "description": "smtplib",
+        "detail": "smtplib",
+        "documentation": {}
+    },
+    {
+        "label": "requests",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "requests",
+        "description": "requests",
+        "detail": "requests",
+        "documentation": {}
+    },
+    {
+        "label": "BeautifulSoup",
+        "importPath": "bs4",
+        "description": "bs4",
+        "isExtraImport": true,
+        "detail": "bs4",
+        "documentation": {}
+    },
+    {
+        "label": "EmailMessage",
+        "importPath": "email.message",
+        "description": "email.message",
+        "isExtraImport": true,
+        "detail": "email.message",
+        "documentation": {}
+    },
+    {
+        "label": "datetime",
+        "importPath": "datetime",
+        "description": "datetime",
+        "isExtraImport": true,
+        "detail": "datetime",
+        "documentation": {}
+    },
+    {
+        "label": "fetch_html",
+        "kind": 2,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "def fetch_html(url):\n    try:\n        r = requests.get(url, timeout=15, headers={\"User-Agent\": \"job-bot\"})\n        return BeautifulSoup(r.text, \"html.parser\")\n    except Exception as e:\n        print(f\"Error fetching {url}: {e}\")\n        return None\ndef parse_generic(site, soup):\n    jobs = []\n    for a in soup.select(\"a\")[:MAX_PER_SITE]:",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "parse_generic",
+        "kind": 2,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "def parse_generic(site, soup):\n    jobs = []\n    for a in soup.select(\"a\")[:MAX_PER_SITE]:\n        title = a.get_text(strip=True)\n        link = a.get(\"href\")\n        if not link or not title:\n            continue\n        link = link if link.startswith(\"http\") else f\"https://{site.lower()}.com{link}\"\n        t = title.lower()\n        if \"java\" in t and any(x in t for x in [\"junior\", \"entry\", \"fresher\", \"graduate\"]):",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "collect_jobs",
+        "kind": 2,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "def collect_jobs():\n    all_jobs = []\n    for site, url in SOURCES:\n        soup = fetch_html(url)\n        if not soup:\n            continue\n        jobs = parse_generic(site, soup)\n        all_jobs.extend(jobs)\n    # dedupe\n    seen = set()",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "build_email",
+        "kind": 2,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "def build_email(jobs):\n    now = datetime.now().strftime(\"%Y-%m-%d %H:%M IST\")\n    if not jobs:\n        body = f\"No new entry-level Java startup jobs found as of {now}.\"\n        return \"Daily Jobs — No results\", body\n    lines = []\n    for i, j in enumerate(jobs, 1):\n        lines.append(f\"{i}) {j['title']} — {j['source']}\\n   {j['link']}\")\n    body = f\"Found {len(jobs)} new entry-level Java jobs at startups — {now}\\n\\n\" + \"\\n\\n\".join(lines)\n    subject = f\"[{len(jobs)}] Java Startup Roles — {datetime.now().strftime('%Y-%m-%d')}\"",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "send_email",
+        "kind": 2,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "def send_email(subject, body):\n    smtp_host = os.getenv(\"SMTP_HOST\")\n    smtp_user = os.getenv(\"SMTP_USER\")\n    smtp_pass = os.getenv(\"SMTP_PASS\")\n    to_email  = os.getenv(\"TO_EMAIL\")\n    msg = EmailMessage()\n    msg[\"Subject\"] = subject\n    msg[\"From\"] = smtp_user\n    msg[\"To\"] = to_email\n    msg.set_content(body)",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "SOURCES",
+        "kind": 5,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "SOURCES = [\n    (\"Wellfound\", \"https://wellfound.com/jobs?search=java+junior\"),\n    (\"StartupJobs\", \"https://startup.jobs/?q=java+junior\"),\n    (\"Dice\", \"https://www.dice.com/jobs?q=java+junior\"),\n    (\"IndeedRSS\", \"https://www.indeed.com/rss?q=java+junior\"),\n]\nMAX_PER_SITE = 10\ndef fetch_html(url):\n    try:\n        r = requests.get(url, timeout=15, headers={\"User-Agent\": \"job-bot\"})",
+        "detail": "job_search",
+        "documentation": {}
+    },
+    {
+        "label": "MAX_PER_SITE",
+        "kind": 5,
+        "importPath": "job_search",
+        "description": "job_search",
+        "peekOfCode": "MAX_PER_SITE = 10\ndef fetch_html(url):\n    try:\n        r = requests.get(url, timeout=15, headers={\"User-Agent\": \"job-bot\"})\n        return BeautifulSoup(r.text, \"html.parser\")\n    except Exception as e:\n        print(f\"Error fetching {url}: {e}\")\n        return None\ndef parse_generic(site, soup):\n    jobs = []",
+        "detail": "job_search",
+        "documentation": {}
+    }
+]
